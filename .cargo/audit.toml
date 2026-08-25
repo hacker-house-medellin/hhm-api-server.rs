@@ -1,0 +1,6 @@
+[advisories]
+# Both advisories exist only in inactive optional SQLx/SeaORM lockfile entries.
+# `cargo tree --locked --target all -i rkyv@0.7.46` and the equivalent command
+# for rsa@0.9.10 print no dependency path for this build. Remove an exception
+# immediately if either crate enters the active target/feature graph.
+ignore = ["RUSTSEC-2026-0235", "RUSTSEC-2023-0071"]

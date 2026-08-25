@@ -1,4 +1,4 @@
-# hhm-api
+# hhm-api-server.rs
 
 **Hacker House Medellín — Rust REST and WebSocket API server**
 
