@@ -1,0 +1,28 @@
+{
+  "source": "ORESoftware/api-docs",
+  "note": "Regenerate with api-docs/scripts/install-into.py; do not edit in place.",
+  "files": {
+    "scripts/check-route-sync.py": "7a4f5f86310184ec8eab6cc48c1aaadba156c453f37ea958308d67f396d5b8a7",
+    "scripts/ridl": "8cb96fa68c141fc2ce68c6849f83d55b0f805d8bcbf89d9a2f60a6080de72202",
+    "vendor/ridl/__init__.py": "5bcb6311bc00ce016b6fa02cd2a2f57ec8196c4583fe3749cdd8537d1c5b5d87",
+    "vendor/ridl/cli.py": "4dc3dc02daf1175eeb5cd5a7a615ac2d65a53b78b1e6db01d2be981d2380e4d0",
+    "vendor/ridl/emit/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "vendor/ridl/emit/base.py": "73f09f5ba45420bbbb03419ccd2ef9587fc710b3768b254e91cfa8d1830caab3",
+    "vendor/ridl/emit/dart.py": "ff69397c025c2ffbca9a0680085ed39d3bf153985057ff5c590b3bab3134dae4",
+    "vendor/ridl/emit/gleam.py": "d7ed2aac99a6e9a2995e5ead9af45aa1b20a9f341c8257bb9514675633db904e",
+    "vendor/ridl/emit/go.py": "bd6d7ac23376fe677d3f70f8524b51407c9c62f5fdb68361aa5ea051b7e8dda5",
+    "vendor/ridl/emit/kotlin.py": "33be73f8ed8ed7b62bbd0d421fee56a2f28b74465e01a600b21d8baa895126a2",
+    "vendor/ridl/emit/python.py": "e258506c8fcc1e4b0859ef06b503a811fc310f92c94f3e9dee07d8a987dc7d42",
+    "vendor/ridl/emit/rust.py": "22d43f769544a3baf285a67df76f5f4a233ac6533a8389c8bea84997067b1c72",
+    "vendor/ridl/emit/swift.py": "b9c6ec912327d14c08830293d3d1fe346c8193cedf2d022e2c35164068d2c37a",
+    "vendor/ridl/emit/typescript.py": "4de0784a22f337ce70c9c76a42cdb71da531e392a7cdd39ad9a1236745849c1b",
+    "vendor/ridl/model.py": "7fa5e37764b8602891e46bd03d453f2a2e64bc3b0b102a274425d58382ad2665",
+    "vendor/ridl/naming.py": "f62fa2da36799b6d6b69e32958e0ef0f9369cf5714eb570386248996405c209f",
+    "vendor/ridl/validate.py": "ddae63c3fed7c024af257fe8d79a99228159cfaf390fe74fc0f465e0027a3f53",
+    "vendor/runtime/rust/Cargo.toml": "e11aabcecd9f4cd7864fdea1bf2fec0ca34ecd5e0f153dd641620c9817e30141",
+    "vendor/runtime/rust/README.md": "e7c479300e23ed9f213537870a52a9e6a8d93130e01f8b49d6b1bc0bc5a01e46",
+    "vendor/runtime/rust/opto_sync.rs": "1ca68d495fe14a66498b8bdc9a54cb0b80089a72ac1f5d0543cd5fffcf76522b",
+    "vendor/runtime/rust/src/lib.rs": "014f5aa32102cd0a6225eff71b7c3ec755881ed4bd265d3df1d197a5dd078fc2",
+    "vendor/runtime/typescript/opto-sync.ts": "c1f9679a93a7dbfb81655e52033b13182b44448f866e05ef125ede5a4286088b"
+  }
+}

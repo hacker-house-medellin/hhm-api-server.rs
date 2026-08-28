@@ -1,0 +1,14 @@
+#!/bin/sh
+# Installed by ridl. Runs the route-map gate before a commit.
+#
+# The gate validates every route map, checks the handlers against it, and fails
+# if the generated clients no longer match. Regenerate with `ridl generate`
+# rather than editing generated files.
+set -e
+root=$(git rev-parse --show-toplevel)
+script="$root/scripts/check-route-sync.py"
+if [ ! -f "$script" ]; then
+  echo "route-map gate: $script is missing; skipping" >&2
+  exit 0
+fi
+exec python3 "$script" --root "$root"
