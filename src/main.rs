@@ -1,3 +1,4 @@
+mod web_api_plane;
 use std::{collections::HashMap, env, sync::Arc};
 
 use anyhow::{Context, bail};
@@ -114,6 +115,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/healthz", get(health))
+            .route("/v1/data-plane/capabilities", axum::routing::get(|| async { axum::Json(crate::web_api_plane::capabilities()) }))
         .route("/v1/reservations", get(list_records).post(create_record))
         .route("/v1/reservations/{id}", get(get_record))
         .route("/v1/ws", get(ws_upgrade))
