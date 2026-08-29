@@ -1,6 +1,6 @@
 [package]
 org = "hacker-house-medellin"
-name = "hhm-api"
+name = "hhm-api-server"
 version = "0.1.0"
 description = "Rust API server for Hacker House Medellín"
 license = "MIT"
@@ -8,16 +8,14 @@ language = "rust"
 
 [package.repository]
 vcs = "git"
-url = "https://github.com/hacker-house-medellin/hhm-api"
+url = "https://github.com/hacker-house-medellin/hhm-api-server.rs"
 
 [install]
 dir = ".vendor/.zed"
 
 [dependencies]
-"hacker-house-medellin/hhm-interfaces" = "^0.1.0"
-"hacker-house-medellin/hhm-libs" = "^0.1.0"
-"hacker-house-medellin/hhm-sync" = "^0.1.0"
-"shared-auth/shared-auth-clients" = "^0.1.0"
+# Cargo.lock and immutable Cargo Git revisions remain authoritative until the
+# corresponding Zed artifacts are published.
 
 [publish]
 include_readme = true
