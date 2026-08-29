@@ -97,11 +97,9 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let db = match env::var("DATABASE_URL") {
-        Ok(url) if !url.trim().is_empty() => Some(
-            Database::connect(url)
-                .await
-                .context("connect database")?,
-        ),
+        Ok(url) if !url.trim().is_empty() => {
+            Some(Database::connect(url).await.context("connect database")?)
+        }
         _ => None,
     };
     let (events, _) = broadcast::channel(512);
@@ -152,7 +150,11 @@ fn cors_layer() -> anyhow::Result<CorsLayer> {
 
 fn parse_cors_origins(raw: &str) -> anyhow::Result<Vec<HeaderValue>> {
     let mut origins = Vec::new();
-    for origin in raw.split(',').map(str::trim).filter(|item| !item.is_empty()) {
+    for origin in raw
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
         if origin == "*" {
             bail!("CORS_ORIGINS must not contain a wildcard");
         }
@@ -248,7 +250,11 @@ async fn create_record(
         )
     })?;
 
-    state.records.write().await.insert(record.id, record.clone());
+    state
+        .records
+        .write()
+        .await
+        .insert(record.id, record.clone());
     let _ = state.events.send(event);
     Ok((StatusCode::CREATED, Json(record)))
 }
@@ -268,7 +274,9 @@ fn normalize_and_validate(mut input: CreateReservation) -> Result<CreateReservat
         MAX_WORKSPACE_PLAN_CHARS,
     )?;
     if input.notes.chars().count() > MAX_NOTES_CHARS {
-        return Err(format!("notes must be at most {MAX_NOTES_CHARS} characters"));
+        return Err(format!(
+            "notes must be at most {MAX_NOTES_CHARS} characters"
+        ));
     }
     if input.check_out <= input.check_in {
         return Err("check_out must be later than check_in".to_owned());
@@ -419,8 +427,14 @@ mod tests {
         )
         .expect("origins are valid");
         assert_eq!(origins.len(), 2);
-        assert_eq!(origins[0], HeaderValue::from_static("https://app.example.test"));
-        assert_eq!(origins[1], HeaderValue::from_static("https://admin.example.test"));
+        assert_eq!(
+            origins[0],
+            HeaderValue::from_static("https://app.example.test")
+        );
+        assert_eq!(
+            origins[1],
+            HeaderValue::from_static("https://admin.example.test")
+        );
     }
 
     #[test]
