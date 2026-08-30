@@ -598,7 +598,11 @@ impl From<DataError> for ApiFailure {
     fn from(error: DataError) -> Self {
         match error {
             DataError::Validation(_) | DataError::InvalidContext(_) => Self::invalid(),
-            DataError::IdempotencyConflict | DataError::IntakeObjectUnavailable => Self::conflict(),
+            DataError::IdempotencyConflict
+            | DataError::IntakeObjectUnavailable
+            | DataError::ProductObjectNotFound
+            | DataError::InvalidApplicationTransition
+            | DataError::PointsBalanceWouldBecomeNegative => Self::conflict(),
             DataError::Unauthenticated => Self::from(AuthError::Missing),
             DataError::Connect(_)
             | DataError::Operation(_)
