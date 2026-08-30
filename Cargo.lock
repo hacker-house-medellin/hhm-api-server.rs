@@ -950,7 +950,7 @@ dependencies = [
 [[package]]
 name = "hhm-interfaces"
 version = "0.1.0"
-source = "git+https://github.com/hacker-house-medellin/hhm-interfaces?rev=e8f0cffd2754aca7596cbcd5011ad8ebde6ef41b#e8f0cffd2754aca7596cbcd5011ad8ebde6ef41b"
+source = "git+https://github.com/hacker-house-medellin/hhm-interfaces?rev=975d06ad5724f1211efb7f7366544ea317d751c1#975d06ad5724f1211efb7f7366544ea317d751c1"
 dependencies = [
  "chrono",
  "serde",
@@ -963,7 +963,7 @@ dependencies = [
 [[package]]
 name = "hhm-orm-core"
 version = "0.1.0"
-source = "git+https://github.com/hacker-house-medellin/hhm-orm-core?rev=62c92a1537240c585893c78de78f15e905a28482#62c92a1537240c585893c78de78f15e905a28482"
+source = "git+https://github.com/hacker-house-medellin/hhm-orm-core?rev=15b869afe3a3276b62f4f36951878b74aa47ce8e#15b869afe3a3276b62f4f36951878b74aa47ce8e"
 dependencies = [
  "chrono",
  "hhm-intake-schema",

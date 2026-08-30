@@ -15,8 +15,10 @@
 
 ## Submission flow
 
-1. The browser validates the versioned client contract and obtains a Turnstile
-   proof. Authenticated pages also send the Shared Auth bearer token.
+1. The browser validates the versioned client contract. Anonymous clients obtain
+   a fresh Turnstile proof; the authenticated BFF sends a short-lived Shared
+   Auth token delegated to the exact `hhm-api` audience and
+   `hhm:intake:write` scope instead.
 2. The API validates the contract, Turnstile action/hostname, optional identity,
    exact origin, and idempotency key.
 3. The API commits the canonical row and outbox item in the primary database.

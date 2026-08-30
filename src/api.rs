@@ -136,17 +136,13 @@ async fn create_pre_interest(
     Json(input): Json<PreInterestCreate>,
 ) -> Result<(StatusCode, Json<SubmissionReceipt>), ApiFailure> {
     input.validate().map_err(|_| ApiFailure::invalid())?;
-    state
-        .turnstile
-        .verify(&input.turnstile_token)
-        .await
-        .map_err(ApiFailure::from)?;
+    let subject =
+        authenticate_or_verify_public(&state, &headers, input.turnstile_token.as_deref()).await?;
     let context = submission_context(
-        &state,
+        subject,
         &headers,
         canonical_digest_without_turnstile(&input)?,
-    )
-    .await?;
+    )?;
     let primary = state
         .primary
         .store_pre_interest(PersistenceTarget::Primary, &context, &input)
@@ -178,17 +174,13 @@ async fn create_upload_intent(
     Json(input): Json<UploadIntentCreate>,
 ) -> Result<(StatusCode, Json<UploadIntentReceipt>), ApiFailure> {
     input.validate().map_err(|_| ApiFailure::invalid())?;
-    state
-        .turnstile
-        .verify(&input.turnstile_token)
-        .await
-        .map_err(ApiFailure::from)?;
+    let subject =
+        authenticate_or_verify_public(&state, &headers, input.turnstile_token.as_deref()).await?;
     let context = submission_context(
-        &state,
+        subject,
         &headers,
         canonical_digest_without_turnstile(&input)?,
-    )
-    .await?;
+    )?;
     let primary = state
         .primary
         .store_upload_intent(PersistenceTarget::Primary, &context, &input)
@@ -238,16 +230,8 @@ async fn complete_upload(
     Json(input): Json<UploadCompleteCreate>,
 ) -> Result<Json<UploadCompletionReceipt>, ApiFailure> {
     input.validate().map_err(|_| ApiFailure::invalid())?;
-    state
-        .turnstile
-        .verify(&input.turnstile_token)
-        .await
-        .map_err(ApiFailure::from)?;
-    let subject = state
-        .auth
-        .optional_subject(&headers)
-        .await
-        .map_err(ApiFailure::from)?;
+    let subject =
+        authenticate_or_verify_public(&state, &headers, input.turnstile_token.as_deref()).await?;
     let primary_upload = state
         .primary
         .pending_upload(upload_id, subject.as_ref())
@@ -305,17 +289,13 @@ async fn create_application(
     Json(input): Json<ApplicationCreate>,
 ) -> Result<(StatusCode, Json<SubmissionReceipt>), ApiFailure> {
     input.validate().map_err(|_| ApiFailure::invalid())?;
-    state
-        .turnstile
-        .verify(&input.turnstile_token)
-        .await
-        .map_err(ApiFailure::from)?;
+    let subject =
+        authenticate_or_verify_public(&state, &headers, input.turnstile_token.as_deref()).await?;
     let context = submission_context(
-        &state,
+        subject,
         &headers,
         canonical_digest_without_turnstile(&input)?,
-    )
-    .await?;
+    )?;
     let primary = state
         .primary
         .store_application(PersistenceTarget::Primary, &context, &input)
@@ -384,19 +364,35 @@ async fn create_referral(
     .await
 }
 
-async fn submission_context(
+async fn authenticate_or_verify_public(
     state: &AppState,
     headers: &HeaderMap,
-    payload_sha256: String,
-) -> Result<SubmissionContext, ApiFailure> {
-    let idempotency_key = idempotency_key(headers)?;
-    let source_host = source_host(headers)?;
-    match state
+    proof: Option<&str>,
+) -> Result<Option<hhm_orm_core::VerifiedSubject>, ApiFailure> {
+    if let Some(subject) = state
         .auth
         .optional_subject(headers)
         .await
         .map_err(ApiFailure::from)?
     {
+        return Ok(Some(subject));
+    }
+    state
+        .turnstile
+        .verify(proof.ok_or_else(ApiFailure::invalid)?)
+        .await
+        .map_err(ApiFailure::from)?;
+    Ok(None)
+}
+
+fn submission_context(
+    subject: Option<hhm_orm_core::VerifiedSubject>,
+    headers: &HeaderMap,
+    payload_sha256: String,
+) -> Result<SubmissionContext, ApiFailure> {
+    let idempotency_key = idempotency_key(headers)?;
+    let source_host = source_host(headers)?;
+    match subject {
         Some(subject) => {
             SubmissionContext::authenticated(subject, idempotency_key, payload_sha256, source_host)
         }
@@ -675,10 +671,10 @@ mod tests {
                 "A sufficiently detailed proposal that is stable across proof refreshes.".into(),
             stay_preference: hhm_interfaces::intake::StayPreference::ThreeMonths,
             privacy_notice_version: hhm_interfaces::intake::PRIVACY_NOTICE_VERSION.into(),
-            turnstile_token: "proof-one".into(),
+            turnstile_token: Some("proof-one".into()),
         };
         let mut two = one.clone();
-        two.turnstile_token = "proof-two".into();
+        two.turnstile_token = Some("proof-two".into());
         assert_eq!(
             canonical_digest_without_turnstile(&one).unwrap(),
             canonical_digest_without_turnstile(&two).unwrap()

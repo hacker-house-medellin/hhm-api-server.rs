@@ -23,7 +23,9 @@ SQL and never runs migrations at startup.
 
 ## Security and persistence boundary
 
-- Cloudflare Turnstile is verified server-side before a public write.
+- Cloudflare Turnstile is verified server-side before every anonymous write.
+  A valid `hhm-api` delegated token with `hhm:intake:write` scope replaces that
+  proof for the authenticated `user.hhaus.org` BFF.
 - A supplied bearer token is introspected with the official Shared Auth service
   client. An invalid token fails closed and is never downgraded to anonymous.
 - Browser CORS uses an exact allowlist; wildcard origins are rejected.

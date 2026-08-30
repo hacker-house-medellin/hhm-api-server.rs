@@ -76,12 +76,21 @@ impl Authenticator {
             .introspect_for_audience(token, &self.audience)
             .await
             .map_err(|error| classify_client_error(&error))?;
-        if !introspection.active || introspection.aud.as_deref() != Some(self.audience.as_str()) {
+        if !eligible_for_intake(&introspection, &self.audience) {
             return Err(AuthError::Invalid);
         }
         VerifiedSubject::from_verified_claim(introspection.sub.ok_or(AuthError::Invalid)?)
             .map_err(|_| AuthError::Invalid)
     }
+}
+
+fn eligible_for_intake(
+    introspection: &shared_auth_service_client::Introspection,
+    audience: &str,
+) -> bool {
+    introspection.active
+        && introspection.aud.as_deref() == Some(audience)
+        && introspection.has_scope("hhm:intake:write")
 }
 
 fn bearer_token(headers: &HeaderMap) -> Result<Option<&str>, AuthError> {
@@ -128,5 +137,26 @@ mod tests {
         assert_eq!(bearer_token(&headers).unwrap(), Some("opaque-token"));
         headers.insert(AUTHORIZATION, "Bearer two tokens".parse().unwrap());
         assert_eq!(bearer_token(&headers), Err(AuthError::Invalid));
+    }
+
+    #[test]
+    fn delegated_token_requires_exact_audience_and_write_scope() {
+        let valid: shared_auth_service_client::Introspection =
+            serde_json::from_value(serde_json::json!({
+                "active": true,
+                "sub": "user-1",
+                "aud": "hhm-api",
+                "scope": "hhm:intake:write"
+            }))
+            .unwrap();
+        assert!(eligible_for_intake(&valid, "hhm-api"));
+
+        let mut wrong_audience = valid.clone();
+        wrong_audience.aud = Some("admin-api".into());
+        assert!(!eligible_for_intake(&wrong_audience, "hhm-api"));
+
+        let mut missing_scope = valid;
+        missing_scope.scope = Some("hhm:intake:read".into());
+        assert!(!eligible_for_intake(&missing_scope, "hhm-api"));
     }
 }
