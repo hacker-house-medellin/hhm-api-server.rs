@@ -10,8 +10,8 @@ anyhow = "1"
 axum = { version = "0.8", features = ["macros"] }
 dotenvy = "0.15"
 futures-util = "0.3"
-hhm-interfaces = { git = "https://github.com/hacker-house-medellin/hhm-interfaces", rev = "975d06ad5724f1211efb7f7366544ea317d751c1" }
-hhm-orm-core = { git = "https://github.com/hacker-house-medellin/hhm-orm-core", rev = "fd3d026aeee79e9b10a3fd50006e48987f72c59f", features = ["read-write"] }
+hhm-interfaces = { git = "https://github.com/hacker-house-medellin/hhm-interfaces", rev = "34ba3c117bc12371d613dd4b05fa018e6629cac6" }
+hhm-orm-core = { git = "https://github.com/hacker-house-medellin/hhm-orm-core", rev = "3917cbe5696be8d70995501f9434adc1cadbf857", features = ["read-write"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
