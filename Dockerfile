@@ -1,9 +1,19 @@
+# syntax=docker/dockerfile:1.7
+
 FROM rust:1.94-bookworm AS build
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
 COPY . .
-RUN cargo build --locked --release
+RUN --mount=type=secret,id=github_token \
+    git config --global credential.https://github.com.helper \
+      '!f() { test "$1" = get && echo username=x-access-token && printf "password=" && cat /run/secrets/github_token; }; f' && \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --locked --release
 
 FROM debian:bookworm-slim
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/hacker-house-medellin/hhm-api-server.rs" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 app
