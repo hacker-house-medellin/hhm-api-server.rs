@@ -1,20 +1,41 @@
-name: ci
+name: rust-ci
+
 on:
   pull_request:
   push:
     branches: [main]
+
 permissions:
   contents: read
+
+concurrency:
+  group: rust-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      FLEET_GITHUB_TOKEN: ${{ secrets.FLEET_GITHUB_READ_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.94
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --all --check
-      - run: cargo check --locked --all-targets --all-features
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --locked --all-targets --all-features
+          persist-credentials: false
+      - name: Require private dependency credential
+        run: test -n "${FLEET_GITHUB_TOKEN}"
+      - name: Configure ephemeral GitHub credential helper
+        run: |
+          git config --global credential.https://github.com.helper \
+            "!f() { test \"\$1\" = get && echo username=x-access-token && echo \"password=\$FLEET_GITHUB_TOKEN\"; }; f"
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
+      - name: Format
+        run: cargo +1.94.0 fmt --all -- --check
+      - name: Check
+        run: cargo +1.94.0 check --locked --all-targets --all-features
+      - name: Clippy
+        run: cargo +1.94.0 clippy --locked --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo +1.94.0 test --locked --all-targets --all-features
