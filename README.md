@@ -1,74 +1,78 @@
 # hhm-api-server.rs
 
-**Hacker House Medellín — Rust REST and WebSocket API server**
+Rust/Axum intake API for HHaus. The service accepts public pre-interest and
+application submissions, authenticated referrals, and private upload intents.
+It writes every accepted submission to the cluster PostgreSQL database and the
+HHaus Supabase PostgreSQL project before returning success.
 
-Operations and community software for an entrepreneur-focused coliving and coworking house in Medellín, Colombia.
+## Routes
 
-This repository is an independently deployable component and a member of the `hhm-monorepo` workspace.
+| Method | Route | Authentication | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/healthz` | none | Process liveness only |
+| `GET` | `/readyz` | none | Both database connections are available |
+| `POST` | `/v1/pre-interests` | optional | Public or recognized pre-interest submission |
+| `POST` | `/v1/intake/uploads` | optional | Create a private, bounded resume/photo-ID upload intent |
+| `POST` | `/v1/intake/uploads/{id}/complete` | optional | Verify uploaded bytes, MIME type, size, and SHA-256 |
+| `POST` | `/v1/applications` | optional | Submit an application that references verified uploads |
+| `POST` | `/v1/referrals` | required | Submit a referral for another person |
 
-## Baseline
+Wire contracts and validation rules are owned by `hhm-interfaces`. Database
+capabilities are owned by `hhm-orm-core`; this runtime cannot execute arbitrary
+SQL and never runs migrations at startup.
 
-- Rust 2024 edition.
-- Axum HTTP and WebSocket transport.
-- SeaORM/PostgreSQL connection through `DATABASE_URL`.
-- Supabase configuration through `SUPABASE_URL` and environment-only secrets.
-- OpenTelemetry-compatible tracing hooks.
-- Docker and GitHub Actions entry points.
-- Contracts live in `hhm-interfaces`; shared behavior belongs in `hhm-libs`.
+## Security and persistence boundary
 
-## Implemented routes
+- Cloudflare Turnstile is verified server-side before every anonymous write.
+  A valid `hhm-api` delegated token with `hhm:intake:write` scope replaces that
+  proof for the authenticated `user.hhaus.org` BFF.
+- A supplied bearer token is introspected with the official Shared Auth service
+  client. An invalid token fails closed and is never downgraded to anonymous.
+- Browser CORS uses an exact allowlist; wildcard origins are rejected.
+- Uploaded identity documents remain in the private Supabase Storage bucket.
+  The API issues a short-lived signed upload URL, then streams and verifies the
+  resulting object without retaining its bytes in application memory.
+- The primary PostgreSQL write and outbox record are atomic. The same canonical
+  UUID and payload digest are then written to Supabase. A success response is
+  sent only after the mirror and outbox acknowledgement succeed.
+- Secrets, bearer tokens, Turnstile tokens, signed URLs, resumes, and photo-ID
+  bytes must never be logged.
 
-- `GET /healthz`
-- `GET /v1/reservations`
-- `POST /v1/reservations`
-- `GET /v1/reservations/{id}`
-- `GET /v1/ws`
+Dual persistence is deliberately not a distributed transaction. If the mirror
+is unavailable after the primary commit, the API returns a retryable `503` with
+the stable submission UUID and preserves a bounded outbox item for repair.
+Idempotency keys and payload digests fence conflicting replays.
 
-The current reservation store is process-local. A configured database connection is reported by `/healthz`, but persistence and migrations remain a separate delivery gate.
+## Runtime configuration
 
-## Reservation boundary
+Copy `.env.example` for the complete variable list. All database credentials,
+the Supabase service-role key, Turnstile secret, and Shared Auth service
+credential are required. Production secrets are supplied through the existing
+SOPS/age runtime entrypoint; they are never embedded in the container image.
 
-Creation accepts a JSON object with:
-
-- `member_name`
-- `room_type`
-- `check_in`
-- `check_out`
-- `workspace_plan`
-- `status`
-- `notes`
-
-Text fields are trimmed and bounded. `check_out` must be later than `check_in`, a stay may not exceed 366 days, and status must be one of `pending`, `confirmed`, `checked_in`, `checked_out`, or `cancelled`. Invalid input receives a typed `422` response.
-
-Successful creation broadcasts a typed `reservation.created` envelope. Lagged WebSocket consumers skip dropped broadcast items and continue receiving subsequent events.
-
-## CORS
-
-`CORS_ORIGINS` is a comma-separated list of exact `http` or `https` origins. Wildcards, paths, and query strings are rejected at startup. Leaving it empty allows same-origin use while emitting no cross-origin allow header.
-
-Example:
-
-```dotenv
-CORS_ORIGINS=http://localhost:3000,https://app.example.test
-```
+`CORS_ORIGINS` is a comma-separated list of exact origins. Remote origins must
+use HTTPS and cannot include paths, queries, fragments, or wildcards.
 
 ## Development
 
+The API requires Rust 1.94 or later.
+
 ```bash
 cp .env.example .env
-cargo fmt --check
+cargo fmt --all --check
+cargo check --locked --all-targets --all-features
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets --all-features
+cargo test --locked --all-targets --all-features
 ```
 
-## Deployment boundary
+The unit suite does not need live secrets. Production startup is intentionally
+fail-closed unless every required integration is configured.
 
-Authentication, durable reservation persistence, migrations, tenant isolation, rate limiting, and production secrets must be completed and reviewed before deployment. Do not treat the in-memory scaffold as a production booking system.
+## Schema and deployment
 
-## Environment secrets
+Apply reviewed migrations from `hhm-lib-core` to the primary cluster database
+and the dedicated Supabase project before deploying this server. The service
+does not create or repair tables. See [`docs/architecture.md`](docs/architecture.md)
+for the ownership and request flow.
 
-Secrets live in this repo **encrypted** with [sops](https://github.com/getsops/sops) + [age](https://github.com/FiloSottile/age):
-`env/enc/<dev|prod>.env.enc` is committed; `just env-use <name>` decrypts it to
-`env/dec/<name>.env` (gitignored, mode 0600) and symlinks `./.env` to it. The
-Nix dev shell provides the tooling, `just env-audit` runs keyless in CI, and
-containers decrypt at `docker run` — never at build. See [`env/README.md`](env/README.md).
+Encrypted environment workflow details remain in [`env/README.md`](env/README.md).

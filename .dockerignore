@@ -1,3 +1,13 @@
+# Keep repository metadata and local build products out of the image context.
+.git
+.github
+.ores
+.vendor
+target
+**/target
+*.pem
+*.key
+
 # BEGIN ores-sops dotenv policy — keep plaintext out of the build context.
 # Ciphertext (env/enc/*.env.enc) and the runtime entrypoint are re-included so
 # the image can decrypt at `docker run`; nothing is decrypted at build time.

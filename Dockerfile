@@ -1,15 +1,25 @@
-FROM rust:1-bookworm AS build
+# syntax=docker/dockerfile:1.7
+
+FROM rust:1.94-bookworm AS build
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
 COPY . .
-RUN cargo build --locked --release || cargo build --release
+RUN --mount=type=secret,id=github_token \
+    git config --global credential.https://github.com.helper \
+      '!f() { test "$1" = get && echo username=x-access-token && printf "password=" && cat /run/secrets/github_token; }; f' && \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --locked --release
 
 FROM debian:bookworm-slim
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/hacker-house-medellin/hhm-api-server.rs" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}"
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 10001 app
 COPY --from=build /work/target/release/hhm-api /usr/local/bin/hhm-api
 USER app
-ENV BIND_ADDR=0.0.0.0:8080
+ENV HOST=0.0.0.0 PORT=8080
 EXPOSE 8080
 
 # --- sops: decrypt at `docker run`, never at `docker build` ------------------
