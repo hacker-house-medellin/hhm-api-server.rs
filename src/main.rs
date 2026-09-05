@@ -1,4 +1,6 @@
-use std::{collections::HashMap, env, sync::Arc};
+mod flags;
+
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, bail};
 use axum::{
@@ -91,12 +93,17 @@ struct Health {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
+    if let Some(output) = flags::process_control().map_err(anyhow::Error::msg)? {
+        print!("{output}");
+        return Ok(());
+    }
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(tracing_subscriber::EnvFilter::try_new(
+            flags::var("RUST_LOG").unwrap_or_else(|_| "error".to_owned()),
+        )?)
         .init();
 
-    let db = match env::var("DATABASE_URL") {
+    let db = match flags::var("DATABASE_URL") {
         Ok(url) if !url.trim().is_empty() => {
             Some(Database::connect(url).await.context("connect database")?)
         }
@@ -119,8 +126,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    let host = env::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".into());
+    let host = flags::var("HOST").unwrap_or_else(|_| "0.0.0.0".into());
+    let port = flags::var("PORT").unwrap_or_else(|_| "8080".into());
     let listener = tokio::net::TcpListener::bind(format!("{host}:{port}")).await?;
     info!(address = %listener.local_addr()?, "Hacker House Medellín API listening");
     axum::serve(listener, app)
@@ -130,14 +137,14 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn non_empty_env(name: &str) -> Option<String> {
-    env::var(name)
+    flags::var(name)
         .ok()
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }
 
 fn cors_layer() -> anyhow::Result<CorsLayer> {
-    let origins = parse_cors_origins(&env::var("CORS_ORIGINS").unwrap_or_default())?;
+    let origins = parse_cors_origins(&flags::var("CORS_ORIGINS").unwrap_or_default())?;
     let layer = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([CONTENT_TYPE]);

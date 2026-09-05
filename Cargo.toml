@@ -8,13 +8,15 @@ license = "MIT"
 anyhow = "1"
 axum = { version = "0.8", features = ["macros", "ws"] }
 chrono = { version = "0.4", features = ["serde"] }
-dotenvy = "0.15"
+flags2env = { version = "0.1.0", git = "https://github.com/flags-2-env/flags-2-env", rev = "d7bad9ea7dfc657653368237e08903514cdca1ec" }
 futures-util = "0.3"
-sea-orm = { version = "2.0", features = ["macros", "runtime-tokio-rustls", "sqlx-postgres"] }
+sea-orm = { version = "=1.1.20", features = ["macros", "runtime-tokio-rustls", "sqlx-postgres"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync"] }
-tower-http = { version = "0.7", features = ["cors", "trace"] }
+toml = "0.8"
+tower-http = { version = "=0.6.11", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1", features = ["serde", "v4"] }
