@@ -224,7 +224,7 @@ fn introspection_endpoint(raw: &str) -> Result<Url, AuthBuildError> {
     }
     let mut segments = url
         .path_segments_mut()
-        .map_err(|_| AuthBuildError::InvalidBaseUrl)?;
+        .map_err(|()| AuthBuildError::InvalidBaseUrl)?;
     segments.pop_if_empty();
     segments.extend(["auth", "introspect"]);
     drop(segments);
