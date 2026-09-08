@@ -27,21 +27,45 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Loads fail-closed runtime configuration without applying schema changes.
+    /// Loads fail-closed runtime configuration from the process environment.
     ///
     /// # Errors
     ///
     /// Returns [`ConfigError`] when a required setting is absent or unsafe.
     pub fn from_env() -> Result<Self, ConfigError> {
-        let host = optional("HOST").unwrap_or_else(|| "0.0.0.0".into());
-        let port = optional("PORT").unwrap_or_else(|| "8080".into());
+        Self::from_resolver(|name| env::var(name).ok())
+    }
+
+    /// Loads fail-closed runtime configuration from an audited resolver.
+    ///
+    /// This is the command-line integration boundary: `flags-2-env` may supply
+    /// typed, precedence-resolved values while secrets continue to arrive only
+    /// from the environment/decrypted runtime. No configuration value is logged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigError`] when a required setting is absent or unsafe.
+    pub fn from_resolver<F>(resolver: F) -> Result<Self, ConfigError>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        Self::from_lookup(resolver)
+    }
+
+    fn from_lookup<F>(mut lookup: F) -> Result<Self, ConfigError>
+    where
+        F: FnMut(&str) -> Option<String>,
+    {
+        let host = optional(&mut lookup, "HOST").unwrap_or_else(|| "0.0.0.0".into());
+        let port = optional(&mut lookup, "PORT").unwrap_or_else(|| "8080".into());
         let bind_address = format!("{host}:{port}")
             .parse()
             .map_err(|_| ConfigError::Invalid("HOST or PORT"))?;
-        let supabase_url = parse_https_url("SUPABASE_URL")?;
-        let shared_auth_base_url = required("SHARED_AUTH_BASE_URL")?;
+        let supabase_url = parse_https_url(&mut lookup, "SUPABASE_URL")?;
+        let shared_auth_base_url = required(&mut lookup, "SHARED_AUTH_BASE_URL")?;
         validate_auth_url(&shared_auth_base_url)?;
-        let turnstile_action = optional("TURNSTILE_ACTION").unwrap_or_else(|| "intake".into());
+        let turnstile_action =
+            optional(&mut lookup, "TURNSTILE_ACTION").unwrap_or_else(|| "intake".into());
         if turnstile_action.len() > 64
             || turnstile_action.is_empty()
             || !turnstile_action
@@ -53,35 +77,53 @@ impl Config {
 
         Ok(Self {
             bind_address,
-            primary_database_url: SecretString::from(required("DATABASE_URL")?),
-            supabase_database_url: SecretString::from(required("SUPABASE_DATABASE_URL")?),
+            primary_database_url: SecretString::from(required(&mut lookup, "DATABASE_URL")?),
+            supabase_database_url: SecretString::from(required(
+                &mut lookup,
+                "SUPABASE_DATABASE_URL",
+            )?),
             supabase_url,
-            supabase_service_role_key: SecretString::from(required("SUPABASE_SERVICE_ROLE_KEY")?),
-            turnstile_secret_key: SecretString::from(required("TURNSTILE_SECRET_KEY")?),
+            supabase_service_role_key: SecretString::from(required(
+                &mut lookup,
+                "SUPABASE_SERVICE_ROLE_KEY",
+            )?),
+            turnstile_secret_key: SecretString::from(required(
+                &mut lookup,
+                "TURNSTILE_SECRET_KEY",
+            )?),
             turnstile_action,
             shared_auth_base_url,
             shared_auth_service_credential: SecretString::from(required(
+                &mut lookup,
                 "SHARED_AUTH_SERVICE_CREDENTIAL",
             )?),
-            shared_auth_audience: required("SHARED_AUTH_AUDIENCE")?,
-            cors_origins: required("CORS_ORIGINS")?,
+            shared_auth_audience: required(&mut lookup, "SHARED_AUTH_AUDIENCE")?,
+            cors_origins: required(&mut lookup, "CORS_ORIGINS")?,
         })
     }
 }
 
-fn required(name: &'static str) -> Result<String, ConfigError> {
-    optional(name).ok_or(ConfigError::Missing(name))
+fn required<F>(lookup: &mut F, name: &'static str) -> Result<String, ConfigError>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    optional(lookup, name).ok_or(ConfigError::Missing(name))
 }
 
-fn optional(name: &str) -> Option<String> {
-    env::var(name)
-        .ok()
+fn optional<F>(lookup: &mut F, name: &str) -> Option<String>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    lookup(name)
         .map(|value| value.trim().to_owned())
         .filter(|value| !value.is_empty())
 }
 
-fn parse_https_url(name: &'static str) -> Result<Url, ConfigError> {
-    let url = Url::parse(&required(name)?).map_err(|_| ConfigError::Invalid(name))?;
+fn parse_https_url<F>(lookup: &mut F, name: &'static str) -> Result<Url, ConfigError>
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let url = Url::parse(&required(lookup, name)?).map_err(|_| ConfigError::Invalid(name))?;
     if url.scheme() != "https" || url.host_str().is_none() || url.query().is_some() {
         return Err(ConfigError::Invalid(name));
     }
@@ -116,11 +158,43 @@ fn validate_auth_url(value: &str) -> Result<(), ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     #[test]
     fn shared_auth_allows_https_and_in_cluster_http_only() {
         assert!(validate_auth_url("https://auth.hhaus.org").is_ok());
         assert!(validate_auth_url("http://shared-auth.auth.svc").is_ok());
         assert!(validate_auth_url("http://auth.hhaus.org").is_err());
+    }
+
+    #[test]
+    fn audited_resolver_drives_non_secret_listener_values() {
+        let values = BTreeMap::from([
+            ("HOST".to_owned(), "127.0.0.1".to_owned()),
+            ("PORT".to_owned(), "31337".to_owned()),
+            ("DATABASE_URL".to_owned(), "postgres://primary".to_owned()),
+            (
+                "SUPABASE_DATABASE_URL".to_owned(),
+                "postgres://supabase".to_owned(),
+            ),
+            (
+                "SUPABASE_URL".to_owned(),
+                "https://example.supabase.co".to_owned(),
+            ),
+            ("SUPABASE_SERVICE_ROLE_KEY".to_owned(), "secret".to_owned()),
+            ("TURNSTILE_SECRET_KEY".to_owned(), "secret".to_owned()),
+            (
+                "SHARED_AUTH_BASE_URL".to_owned(),
+                "https://auth.hhaus.org".to_owned(),
+            ),
+            (
+                "SHARED_AUTH_SERVICE_CREDENTIAL".to_owned(),
+                "secret".to_owned(),
+            ),
+            ("SHARED_AUTH_AUDIENCE".to_owned(), "hhm-api".to_owned()),
+            ("CORS_ORIGINS".to_owned(), "https://hhaus.org".to_owned()),
+        ]);
+        let config = Config::from_resolver(|name| values.get(name).cloned()).expect("config");
+        assert_eq!(config.bind_address.to_string(), "127.0.0.1:31337");
     }
 }
