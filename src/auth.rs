@@ -1,14 +1,37 @@
+use std::time::Duration;
+
 use axum::http::{HeaderMap, header::AUTHORIZATION};
+use futures_util::StreamExt;
 use hhm_orm_core::VerifiedSubject;
-use secrecy::ExposeSecret;
-use shared_auth_service_client::{ClientError, SharedAuthClient};
+use reqwest::{StatusCode, header::ACCEPT, redirect::Policy};
+use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::config::Config;
 
+const MAX_CREDENTIAL_BYTES: usize = 16 * 1024;
+const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_AUDIENCE_BYTES: usize = 128;
+
 #[derive(Clone)]
 pub struct Authenticator {
-    client: SharedAuthClient,
+    http: reqwest::Client,
+    endpoint: Url,
+    service_credential: SecretString,
     audience: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AuthBuildError {
+    #[error("shared-auth base URL is invalid")]
+    InvalidBaseUrl,
+    #[error("shared-auth service credential is invalid")]
+    InvalidServiceCredential,
+    #[error("shared-auth audience is invalid")]
+    InvalidAudience,
+    #[error("shared-auth HTTP transport could not be initialized")]
+    Transport(#[from] reqwest::Error),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -21,22 +44,82 @@ pub enum AuthError {
     Unavailable,
 }
 
+#[derive(Debug, Serialize)]
+struct IntrospectionEnvelope<'a> {
+    contract: &'static str,
+    payload: IntrospectionRequest<'a>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IntrospectionRequest<'a> {
+    token: &'a str,
+    audience: &'a str,
+    required_scopes: &'a [&'a str],
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct Introspection {
+    active: bool,
+    #[serde(default)]
+    sub: Option<String>,
+    #[serde(default)]
+    aud: Option<String>,
+    #[serde(default)]
+    scope: Option<String>,
+}
+
+impl Introspection {
+    fn has_scope(&self, required: &str) -> bool {
+        self.active
+            && self.scope.as_deref().is_some_and(|scope| {
+                scope
+                    .split_ascii_whitespace()
+                    .any(|candidate| candidate == required)
+            })
+    }
+}
+
 impl Authenticator {
-    /// Builds the official protected-introspection client.
+    /// Builds a bounded, redirect-free adapter for the canonical Shared Auth
+    /// `IntrospectionRequest` protocol.
+    ///
+    /// The adapter deliberately owns only transport and response validation;
+    /// token authority and claim semantics remain in Shared Auth.
     ///
     /// # Errors
     ///
-    /// Returns [`ClientError`] if the configured Shared Auth URL is invalid.
-    pub fn from_config(config: &Config) -> Result<Self, ClientError> {
-        let client = SharedAuthClient::try_new(config.shared_auth_base_url.clone())?
-            .with_service_credential(
-                config
-                    .shared_auth_service_credential
-                    .expose_secret()
-                    .to_owned(),
-            );
+    /// Returns [`AuthBuildError`] when the configured endpoint, service
+    /// credential, audience, or HTTP client policy is invalid.
+    pub fn from_config(config: &Config) -> Result<Self, AuthBuildError> {
+        let credential = config.shared_auth_service_credential.expose_secret();
+        if credential.is_empty()
+            || credential.len() > MAX_CREDENTIAL_BYTES
+            || credential.contains(char::is_whitespace)
+        {
+            return Err(AuthBuildError::InvalidServiceCredential);
+        }
+        if config.shared_auth_audience.is_empty()
+            || config.shared_auth_audience.len() > MAX_AUDIENCE_BYTES
+            || !config.shared_auth_audience.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':' | b'.')
+            })
+        {
+            return Err(AuthBuildError::InvalidAudience);
+        }
+
+        let endpoint = introspection_endpoint(&config.shared_auth_base_url)?;
+        let http = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(5))
+            .redirect(Policy::none())
+            .user_agent("hhm-api-shared-auth-adapter/0.1")
+            .build()?;
+
         Ok(Self {
-            client,
+            http,
+            endpoint,
+            service_credential: config.shared_auth_service_credential.clone(),
             audience: config.shared_auth_audience.clone(),
         })
     }
@@ -71,11 +154,40 @@ impl Authenticator {
     }
 
     async fn verify(&self, token: &str) -> Result<VerifiedSubject, AuthError> {
-        let introspection = self
-            .client
-            .introspect_for_audience(token, &self.audience)
+        let response = self
+            .http
+            .post(self.endpoint.clone())
+            .header(ACCEPT, "application/json")
+            .bearer_auth(self.service_credential.expose_secret())
+            .json(&IntrospectionEnvelope {
+                contract: "IntrospectionRequest",
+                payload: IntrospectionRequest {
+                    token,
+                    audience: &self.audience,
+                    required_scopes: &[],
+                },
+            })
+            .send()
             .await
-            .map_err(|error| classify_client_error(&error))?;
+            .map_err(|_| AuthError::Unavailable)?;
+
+        let status = response.status();
+        if status.is_server_error() {
+            return Err(AuthError::Unavailable);
+        }
+        if status == StatusCode::UNAUTHORIZED || !status.is_success() {
+            return Err(AuthError::Invalid);
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+        {
+            return Err(AuthError::Invalid);
+        }
+
+        let bytes = bounded_response(response).await?;
+        let introspection: Introspection =
+            serde_json::from_slice(&bytes).map_err(|_| AuthError::Invalid)?;
         if !eligible_for_intake(&introspection, &self.audience) {
             return Err(AuthError::Invalid);
         }
@@ -84,10 +196,42 @@ impl Authenticator {
     }
 }
 
-fn eligible_for_intake(
-    introspection: &shared_auth_service_client::Introspection,
-    audience: &str,
-) -> bool {
+async fn bounded_response(response: reqwest::Response) -> Result<Vec<u8>, AuthError> {
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| AuthError::Unavailable)?;
+        let next_len = body
+            .len()
+            .checked_add(chunk.len())
+            .ok_or(AuthError::Invalid)?;
+        if next_len > MAX_RESPONSE_BYTES {
+            return Err(AuthError::Invalid);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
+fn introspection_endpoint(raw: &str) -> Result<Url, AuthBuildError> {
+    let mut url = Url::parse(raw).map_err(|_| AuthBuildError::InvalidBaseUrl)?;
+    if url.username() != ""
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AuthBuildError::InvalidBaseUrl);
+    }
+    let mut segments = url
+        .path_segments_mut()
+        .map_err(|_| AuthBuildError::InvalidBaseUrl)?;
+    segments.pop_if_empty();
+    segments.extend(["auth", "introspect"]);
+    drop(segments);
+    Ok(url)
+}
+
+fn eligible_for_intake(introspection: &Introspection, audience: &str) -> bool {
     introspection.active
         && introspection.aud.as_deref() == Some(audience)
         && introspection.has_scope("hhm:intake:write")
@@ -101,29 +245,12 @@ fn bearer_token(headers: &HeaderMap) -> Result<Option<&str>, AuthError> {
     let (scheme, token) = raw.split_once(' ').ok_or(AuthError::Invalid)?;
     if !scheme.eq_ignore_ascii_case("bearer")
         || token.is_empty()
-        || token.len() > 16 * 1024
+        || token.len() > MAX_CREDENTIAL_BYTES
         || token.contains(char::is_whitespace)
     {
         return Err(AuthError::Invalid);
     }
     Ok(Some(token))
-}
-
-fn classify_client_error(error: &ClientError) -> AuthError {
-    match error {
-        ClientError::Transport(_)
-        | ClientError::Status(500..=599)
-        | ClientError::MissingServiceCredential
-        | ClientError::InvalidBaseUrl
-        | ClientError::InsecureTransport(_) => AuthError::Unavailable,
-        ClientError::Unauthorized
-        | ClientError::InvalidInput(_)
-        | ClientError::RequestTooLarge { .. }
-        | ClientError::ResponseTooLarge { .. }
-        | ClientError::Encode { .. }
-        | ClientError::Decode { .. }
-        | ClientError::Status(_) => AuthError::Invalid,
-    }
 }
 
 #[cfg(test)]
@@ -141,14 +268,12 @@ mod tests {
 
     #[test]
     fn delegated_token_requires_exact_audience_and_write_scope() {
-        let valid: shared_auth_service_client::Introspection =
-            serde_json::from_value(serde_json::json!({
-                "active": true,
-                "sub": "user-1",
-                "aud": "hhm-api",
-                "scope": "hhm:intake:write"
-            }))
-            .unwrap();
+        let valid = Introspection {
+            active: true,
+            sub: Some("user-1".into()),
+            aud: Some("hhm-api".into()),
+            scope: Some("hhm:intake:write".into()),
+        };
         assert!(eligible_for_intake(&valid, "hhm-api"));
 
         let mut wrong_audience = valid.clone();
@@ -158,5 +283,14 @@ mod tests {
         let mut missing_scope = valid;
         missing_scope.scope = Some("hhm:intake:read".into());
         assert!(!eligible_for_intake(&missing_scope, "hhm-api"));
+    }
+
+    #[test]
+    fn mounted_prefix_is_preserved_when_building_introspection_endpoint() {
+        let endpoint = introspection_endpoint("https://gateway.example/shared-auth/").unwrap();
+        assert_eq!(
+            endpoint.as_str(),
+            "https://gateway.example/shared-auth/auth/introspect"
+        );
     }
 }
