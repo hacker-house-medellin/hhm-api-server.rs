@@ -1,9 +1,9 @@
-pub mod api;
-pub mod auth;
+mod api;
+mod auth;
 pub mod config;
-pub mod external;
+mod external;
 pub mod middleware;
-pub mod persistence;
+mod persistence;
 
 use std::net::SocketAddr;
 

@@ -1,4 +1,4 @@
-//! HHaus request-lifecycle policy built on the public ORES middleware contract.
+//! `HHaus` request-lifecycle policy built on the public ORES middleware contract.
 
 use std::{future::Future, sync::Arc, time::Duration};
 
@@ -179,10 +179,21 @@ fn split_csv(value: &str) -> Vec<String> {
 /// while referrals require Shared Auth. The middleware still supplies bounded
 /// payloads, trusted-peer handling, correlation, deadlines, rate limiting,
 /// security headers, and the `ores-otel`-compatible telemetry port.
+///
+/// # Errors
+///
+/// Returns an error when the resolved middleware policy violates the upstream
+/// lifecycle contract.
 pub fn stack(config: &Config) -> anyhow::Result<MiddlewareStack> {
     stack_from_policy(&config.request_policy)
 }
 
+/// Builds a middleware stack from an already validated request policy.
+///
+/// # Errors
+///
+/// Returns an error when upstream contract validation or HMAC-key installation
+/// fails.
 pub fn stack_from_policy(policy: &RequestPolicy) -> anyhow::Result<MiddlewareStack> {
     let mut config = default_config("hhm-api");
     config.environment = policy.environment.clone();
@@ -191,7 +202,11 @@ pub fn stack_from_policy(policy: &RequestPolicy) -> anyhow::Result<MiddlewareSta
     config.settings.tls.mode = policy.tls_mode.as_contract_value().into();
     config.settings.tls.require_https = !matches!(policy.tls_mode, TlsMode::Disabled);
     config.settings.tls.strict_forwarded_headers = true;
-    config.settings.tls.trusted_proxy_cidrs = policy.trusted_proxy_cidrs.clone();
+    config
+        .settings
+        .tls
+        .trusted_proxy_cidrs
+        .clone_from(&policy.trusted_proxy_cidrs);
     config.settings.rate_limit.capacity = policy.rate_limit_capacity;
     config.settings.rate_limit.refill_per_second = policy.rate_limit_refill_per_second;
     config.settings.rate_limit.key_by = vec![
@@ -231,7 +246,6 @@ pub fn stack_from_policy(policy: &RequestPolicy) -> anyhow::Result<MiddlewareSta
     }
 }
 
-#[must_use]
 pub fn install(router: Router, stack: MiddlewareStack) -> Router {
     ores_middleware::frameworks::axum::install(router, Arc::new(stack))
 }

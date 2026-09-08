@@ -235,7 +235,7 @@ fn introspection_endpoint(raw: &str) -> Result<Url, AuthBuildError> {
 }
 
 fn authorize_introspection(introspection: &Introspection, audience: &str) -> Result<(), AuthError> {
-    if !introspection.active || !(introspection.aud.as_deref() == Some(audience)) {
+    if !introspection.active || introspection.aud.as_deref() != Some(audience) {
         return Err(AuthError::Invalid);
     }
     if !introspection.has_scope("hhm:intake:write") {

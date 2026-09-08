@@ -334,31 +334,30 @@ impl WriteContext {
                 ],
             ))
             .await?;
-        let (id, object_key, expires_at, replayed) = match inserted {
-            Some(row) => (
+        let (id, object_key, expires_at, replayed) = if let Some(row) = inserted {
+            (
                 read_uuid(&row, "id")?,
                 read_string(&row, "object_key")?,
                 read_timestamp(&row, "expires_at")?,
                 false,
-            ),
-            None => {
-                let row = transaction
-                    .query_one_raw(Statement::from_sql_and_values(
-                        DatabaseBackend::Postgres,
-                        "SELECT id, object_key, expires_at, payload_sha256
+            )
+        } else {
+            let row = transaction
+                .query_one_raw(Statement::from_sql_and_values(
+                    DatabaseBackend::Postgres,
+                    "SELECT id, object_key, expires_at, payload_sha256
                          FROM hhm_intake_uploads WHERE idempotency_key = $1",
-                        [context.idempotency_key.clone().into()],
-                    ))
-                    .await?
-                    .ok_or(DataError::Invariant)?;
-                require_same_payload(&row, context.payload_sha256())?;
-                (
-                    read_uuid(&row, "id")?,
-                    read_string(&row, "object_key")?,
-                    read_timestamp(&row, "expires_at")?,
-                    true,
-                )
-            }
+                    [context.idempotency_key.clone().into()],
+                ))
+                .await?
+                .ok_or(DataError::Invariant)?;
+            require_same_payload(&row, context.payload_sha256())?;
+            (
+                read_uuid(&row, "id")?,
+                read_string(&row, "object_key")?,
+                read_timestamp(&row, "expires_at")?,
+                true,
+            )
         };
         let stored = StoredSubmission {
             id,

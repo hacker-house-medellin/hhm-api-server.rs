@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
 COPY Cargo.toml Cargo.lock ./
+COPY src/lib.rs src/main.rs ./src/
 RUN cargo fetch --locked
 COPY . .
 RUN cargo build --locked --release

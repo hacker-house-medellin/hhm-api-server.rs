@@ -92,7 +92,7 @@ def main() -> None:
     auth_anchors = {
         "redirect refusal": ".redirect(Policy::none())",
         "bounded response": "MAX_RESPONSE_BYTES",
-        "exact audience": "introspection.aud.as_deref() == Some(audience)",
+        "exact audience rejection": "introspection.aud.as_deref() != Some(audience)",
         "write scope": "hhm:intake:write",
         "active claim": "introspection.active",
     }
