@@ -62,6 +62,7 @@ pub fn process_control() -> Result<Option<String>, String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unnecessary_wraps)]
 /// Bypasses process-level argv handling in isolated unit tests.
 ///
 /// # Errors

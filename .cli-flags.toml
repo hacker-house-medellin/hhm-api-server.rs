@@ -10,7 +10,14 @@ columns = ["options", "env", "type", "default", "description"]
 allow_unknown = false
 
 [env]
-ignore = ["DATABASE_URL"]
+ignore = [
+  "DATABASE_URL",
+  "SUPABASE_DATABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "TURNSTILE_SECRET_KEY",
+  "SHARED_AUTH_SERVICE_CREDENTIAL",
+  "ORES_MIDDLEWARE_RATE_LIMIT_HMAC_SECRET",
+]
 
 [flags.help]
 env = "CLI_HELP_REQUESTED"
@@ -62,3 +69,52 @@ long = "rust-log"
 type = "string"
 default = "error"
 help = "Tracing filter."
+
+[flags.app-env]
+env = "APP_ENV"
+long = "app-env"
+type = "string"
+default = "development"
+help = "Runtime policy environment: development, test, staging, or production."
+
+[flags.middleware-tls-mode]
+env = "ORES_MIDDLEWARE_TLS_MODE"
+long = "middleware-tls-mode"
+type = "string"
+default = "disabled"
+help = "Request transport policy: disabled, in-process, or trusted-proxy."
+
+[flags.middleware-trusted-proxy-cidrs]
+env = "ORES_MIDDLEWARE_TRUSTED_PROXY_CIDRS"
+long = "middleware-trusted-proxy-cidrs"
+type = "string"
+default = ""
+help = "Comma-separated immediate-peer CIDRs trusted to supply forwarded headers."
+
+[flags.middleware-timeout-ms]
+env = "ORES_MIDDLEWARE_TIMEOUT_MS"
+long = "middleware-timeout-ms"
+type = "integer"
+default = 10000
+help = "Maximum HTTP request lifecycle in milliseconds."
+
+[flags.middleware-max-body-bytes]
+env = "ORES_MIDDLEWARE_MAX_BODY_BYTES"
+long = "middleware-max-body-bytes"
+type = "integer"
+default = 262144
+help = "Maximum request body size in bytes."
+
+[flags.middleware-rate-limit-capacity]
+env = "ORES_MIDDLEWARE_RATE_LIMIT_CAPACITY"
+long = "middleware-rate-limit-capacity"
+type = "integer"
+default = 60
+help = "Per-peer and route token-bucket capacity."
+
+[flags.middleware-rate-limit-refill]
+env = "ORES_MIDDLEWARE_RATE_LIMIT_REFILL_PER_SECOND"
+long = "middleware-rate-limit-refill"
+type = "number"
+default = 1
+help = "Per-peer and route token refill rate per second."
