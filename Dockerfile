@@ -6,31 +6,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 WORKDIR /work
 COPY Cargo.toml Cargo.lock ./
 RUN --mount=type=secret,id=hhm_github_token,required=true \
-    --mount=type=secret,id=shared_auth_github_token,required=true \
     set -eu; \
     hhm_token="$(cat /run/secrets/hhm_github_token)"; \
-    auth_token="$(cat /run/secrets/shared_auth_github_token)"; \
     test -n "$hhm_token"; \
-    test -n "$auth_token"; \
     trap 'rm -f /root/.gitconfig' EXIT; \
     git config --global url."https://x-access-token:${hhm_token}@github.com/hacker-house-medellin/".insteadOf \
       "https://github.com/hacker-house-medellin/"; \
-    git config --global url."https://x-access-token:${auth_token}@github.com/shared-auth/".insteadOf \
-      "https://github.com/shared-auth/"; \
     CARGO_NET_GIT_FETCH_WITH_CLI=true cargo fetch --locked
 COPY . .
 RUN --mount=type=secret,id=hhm_github_token,required=true \
-    --mount=type=secret,id=shared_auth_github_token,required=true \
     set -eu; \
     hhm_token="$(cat /run/secrets/hhm_github_token)"; \
-    auth_token="$(cat /run/secrets/shared_auth_github_token)"; \
     test -n "$hhm_token"; \
-    test -n "$auth_token"; \
     trap 'rm -f /root/.gitconfig' EXIT; \
     git config --global url."https://x-access-token:${hhm_token}@github.com/hacker-house-medellin/".insteadOf \
       "https://github.com/hacker-house-medellin/"; \
-    git config --global url."https://x-access-token:${auth_token}@github.com/shared-auth/".insteadOf \
-      "https://github.com/shared-auth/"; \
     CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --locked --release
 
 FROM debian:bookworm-slim
