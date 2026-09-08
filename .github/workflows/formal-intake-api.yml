@@ -1,0 +1,100 @@
+name: Formal API intake state machine
+
+on:
+  pull_request:
+    paths:
+      - src/api.rs
+      - src/auth.rs
+      - src/config.rs
+      - src/middleware.rs
+      - src/persistence.rs
+      - formal/intake_api.qnt
+      - formal/check_refinement.py
+      - formal/README.md
+      - .github/workflows/formal-intake-api.yml
+  push:
+    branches: [dev, main]
+    paths:
+      - src/api.rs
+      - src/auth.rs
+      - src/config.rs
+      - src/middleware.rs
+      - src/persistence.rs
+      - formal/intake_api.qnt
+      - formal/check_refinement.py
+      - formal/README.md
+      - .github/workflows/formal-intake-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formal-api-intake-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact triggering head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install explicit-state checker runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends openjdk-21-jre-headless
+          node --version
+          java -version
+
+      - name: Typecheck
+        run: >-
+          npx --yes @informalsystems/quint@0.32.0 typecheck
+          formal/intake_api.qnt
+
+      - name: Simulate adversarial schedules
+        run: |
+          set -euo pipefail
+          mkdir -p .formal-artifacts
+          npx --yes @informalsystems/quint@0.32.0 run \
+            formal/intake_api.qnt \
+            --main=intake_api \
+            --init=init \
+            --step=step \
+            --invariant=api_safety \
+            --max-samples=20000 \
+            --max-steps=30 \
+            --backend=typescript \
+            --out-itf=.formal-artifacts/sample.itf.json \
+            | tee .formal-artifacts/quint-run.txt
+
+      - name: Exhaustively verify the finite state space
+        run: |
+          set -euo pipefail
+          npx --yes @informalsystems/quint@0.32.0 verify \
+            formal/intake_api.qnt \
+            --main=intake_api \
+            --init=init \
+            --step=step \
+            --invariant=api_safety \
+            --backend=tlc \
+            | tee .formal-artifacts/quint-verify.txt
+
+      - name: Check production refinement anchors
+        run: >-
+          python3 formal/check_refinement.py
+          | tee .formal-artifacts/refinement-receipt.json
+
+      - name: Upload formal evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hhaus-api-formal-${{ github.sha }}
+          path: .formal-artifacts/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

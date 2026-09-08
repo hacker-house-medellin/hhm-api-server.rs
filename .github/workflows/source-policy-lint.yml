@@ -4,7 +4,7 @@ name: Pre-build source policy lint
 on:
   pull_request:
   push:
-    branches: ["main"]
+    branches: ["dev", "main"]
   workflow_dispatch:
 
 permissions:
