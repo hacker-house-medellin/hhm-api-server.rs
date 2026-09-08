@@ -24,19 +24,7 @@ jobs:
       - name: Preserve the fallible production signature and scope the test-only lint exception
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('src/flags.rs')
-          text = path.read_text(encoding='utf-8')
-          old = '''#[cfg(test)]
-/// Bypasses process-level argv handling in isolated unit tests.'''
-          new = '''#[cfg(test)]
-#[allow(clippy::unnecessary_wraps)]
-/// Bypasses process-level argv handling in isolated unit tests.'''
-          if text.count(old) != 1:
-              raise SystemExit('expected exactly one test-only process_control boundary')
-          path.write_text(text.replace(old, new), encoding='utf-8')
-          PY
+          python3 -c 'from pathlib import Path; p=Path("src/flags.rs"); s=p.read_text(); old="#[cfg(test)]\n/// Bypasses process-level argv handling in isolated unit tests."; new="#[cfg(test)]\n#[allow(clippy::unnecessary_wraps)]\n/// Bypasses process-level argv handling in isolated unit tests."; assert s.count(old)==1; p.write_text(s.replace(old,new))'
           git diff --check
           grep -Fq '#[allow(clippy::unnecessary_wraps)]' src/flags.rs
           git config user.name 'github-actions[bot]'
