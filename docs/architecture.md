@@ -6,10 +6,12 @@
   request/receipt validation.
 - `hhm-lib-core`: declarative PostgreSQL authority, generated migration, Diesel
   schema, and generated SeaORM entities.
-- `hhm-orm-core`: named least-privilege read/write capabilities and dual-target
-  persistence mechanics.
 - `hhm-api-server.rs`: HTTP, anti-abuse, authentication, orchestration, private
-  object verification, and safe error mapping.
+  object verification, named dual-target persistence commands, and safe error
+  mapping. It depends only on distributable public source repositories.
+- `ores-middleware`: portable request lifecycle, trusted-peer/TLS policy,
+  request context, limits, rate limiting, security headers, and the compatible
+  `ores-otel` telemetry port.
 - `hhm-web-server.rs`: authenticated pages and prefill. It consumes read-only
   capabilities directly and submits writes through this API.
 
@@ -56,3 +58,14 @@ Shared Auth is called through its in-cluster service address. Supabase database,
 Storage, and Turnstile are explicit outbound dependencies. Startup and readiness
 fail closed when required database capabilities are unavailable; liveness does
 not depend on external services.
+
+The Axum server records the socket peer through `ConnectInfo`. In production,
+TLS either terminates in-process or at a proxy whose immediate-peer CIDR is in
+`ORES_MIDDLEWARE_TRUSTED_PROXY_CIDRS`; forwarded headers from any other peer are
+rejected before authentication or rate-limit identity is evaluated.
+
+Infra reserves public WebSocket route `/v1/realtime` and internal raw TCP port
+`8090`. This revision does not activate a realtime protocol: WebSocket message
+work has a reusable deadline/panic-isolation boundary, while route payloads and
+the TCP frame/auth contract remain fail-closed until their interface contracts
+and end-to-end tests land.

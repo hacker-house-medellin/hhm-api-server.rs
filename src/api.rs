@@ -1,3 +1,7 @@
+use crate::persistence::{
+    DataError, PersistenceTarget, StoredSubmission, StoredSubmissionKind, SubmissionContext,
+    WriteContext,
+};
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -13,17 +17,10 @@ use hhm_interfaces::intake::{
     SubmissionKind, SubmissionReceipt, UploadCompleteCreate, UploadCompletionReceipt,
     UploadCompletionStatus, UploadIntentCreate, UploadIntentReceipt, UploadKind,
 };
-use hhm_orm_core::{
-    DataError, PersistenceTarget, StoredSubmission, StoredSubmissionKind, SubmissionContext,
-    WriteContext,
-};
 use secrecy::ExposeSecret;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tower_http::{
-    cors::{AllowOrigin, CorsLayer},
-    trace::TraceLayer,
-};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::warn;
 use uuid::Uuid;
 
@@ -111,7 +108,6 @@ pub fn router(state: AppState, cors_origins: &str) -> anyhow::Result<Router> {
         .route("/v1/applications", post(create_application))
         .route("/v1/referrals", post(create_referral))
         .layer(cors)
-        .layer(TraceLayer::new_for_http())
         .with_state(state))
 }
 
@@ -149,12 +145,11 @@ async fn create_pre_interest(
         .await
         .map_err(ApiFailure::from)?;
     let mirror_context = context.with_canonical_id(primary.id);
-    if state
+    let mirrored = state
         .supabase
         .store_pre_interest(PersistenceTarget::SupabaseMirror, &mirror_context, &input)
-        .await
-        .is_err()
-    {
+        .await;
+    if !matches!(mirrored, Ok(ref stored) if stored.id == primary.id) {
         record_failure(&state, StoredSubmissionKind::PreInterest, primary.id).await;
         return Err(ApiFailure::mirror_unavailable(primary.id));
     }
@@ -187,12 +182,11 @@ async fn create_upload_intent(
         .await
         .map_err(ApiFailure::from)?;
     let mirror_context = context.with_canonical_id(primary.id);
-    if state
+    let mirrored = state
         .supabase
         .store_upload_intent(PersistenceTarget::SupabaseMirror, &mirror_context, &input)
-        .await
-        .is_err()
-    {
+        .await;
+    if !matches!(mirrored, Ok(ref stored) if stored.id == primary.id) {
         record_failure(&state, StoredSubmissionKind::Upload, primary.id).await;
         return Err(ApiFailure::mirror_unavailable(primary.id));
     }
@@ -273,8 +267,8 @@ async fn complete_upload(
 }
 
 fn same_upload_identity(
-    primary: &hhm_orm_core::PendingUpload,
-    mirror: &hhm_orm_core::PendingUpload,
+    primary: &crate::persistence::PendingUpload,
+    mirror: &crate::persistence::PendingUpload,
 ) -> bool {
     primary.id == mirror.id
         && primary.object_key == mirror.object_key
@@ -302,12 +296,11 @@ async fn create_application(
         .await
         .map_err(ApiFailure::from)?;
     let mirror_context = context.with_canonical_id(primary.id);
-    if state
+    let mirrored = state
         .supabase
         .store_application(PersistenceTarget::SupabaseMirror, &mirror_context, &input)
-        .await
-        .is_err()
-    {
+        .await;
+    if !matches!(mirrored, Ok(ref stored) if stored.id == primary.id) {
         record_failure(&state, StoredSubmissionKind::Application, primary.id).await;
         return Err(ApiFailure::mirror_unavailable(primary.id));
     }
@@ -345,12 +338,11 @@ async fn create_referral(
         .await
         .map_err(ApiFailure::from)?;
     let mirror_context = context.with_canonical_id(primary.id);
-    if state
+    let mirrored = state
         .supabase
         .store_referral(PersistenceTarget::SupabaseMirror, &mirror_context, &input)
-        .await
-        .is_err()
-    {
+        .await;
+    if !matches!(mirrored, Ok(ref stored) if stored.id == primary.id) {
         record_failure(&state, StoredSubmissionKind::Referral, primary.id).await;
         return Err(ApiFailure::mirror_unavailable(primary.id));
     }
@@ -368,7 +360,7 @@ async fn authenticate_or_verify_public(
     state: &AppState,
     headers: &HeaderMap,
     proof: Option<&str>,
-) -> Result<Option<hhm_orm_core::VerifiedSubject>, ApiFailure> {
+) -> Result<Option<crate::persistence::VerifiedSubject>, ApiFailure> {
     if let Some(subject) = state
         .auth
         .optional_subject(headers)
@@ -386,7 +378,7 @@ async fn authenticate_or_verify_public(
 }
 
 fn submission_context(
-    subject: Option<hhm_orm_core::VerifiedSubject>,
+    subject: Option<crate::persistence::VerifiedSubject>,
     headers: &HeaderMap,
     payload_sha256: String,
 ) -> Result<SubmissionContext, ApiFailure> {
@@ -598,17 +590,9 @@ impl From<DataError> for ApiFailure {
     fn from(error: DataError) -> Self {
         match error {
             DataError::Validation(_) | DataError::InvalidContext(_) => Self::invalid(),
-            DataError::IdempotencyConflict
-            | DataError::IntakeObjectUnavailable
-            | DataError::ProductObjectNotFound
-            | DataError::InvalidApplicationTransition
-            | DataError::PointsBalanceWouldBecomeNegative => Self::conflict(),
+            DataError::IdempotencyConflict | DataError::IntakeObjectUnavailable => Self::conflict(),
             DataError::Unauthenticated => Self::from(AuthError::Missing),
-            DataError::Connect(_)
-            | DataError::Operation(_)
-            | DataError::WritableReadContext
-            | DataError::Decode
-            | DataError::Invariant => Self::new(
+            DataError::Database | DataError::Decode | DataError::Invariant => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "persistence_unavailable",
                 "The intake service could not complete persistence.",
@@ -626,6 +610,13 @@ impl From<AuthError> for ApiFailure {
                 StatusCode::UNAUTHORIZED,
                 "authentication_required",
                 "A valid Shared Auth session is required.",
+                false,
+                None,
+            ),
+            AuthError::Forbidden => Self::new(
+                StatusCode::FORBIDDEN,
+                "authorization_denied",
+                "The authenticated subject is not allowed to perform this action.",
                 false,
                 None,
             ),
@@ -693,6 +684,12 @@ mod tests {
     }
 
     #[test]
+    fn authorization_denial_is_forbidden() {
+        let response = ApiFailure::from(AuthError::Forbidden).into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[test]
     fn upload_identity_ignores_independent_expiry_clocks() {
         let base = serde_json::json!({
             "id": "0b46178c-c81d-4d28-8298-7f66a9467a4f",
@@ -702,10 +699,24 @@ mod tests {
             "sizeBytes": 1024,
             "expiresAt": "2026-08-30T12:00:00Z"
         });
-        let primary: hhm_orm_core::PendingUpload = serde_json::from_value(base.clone()).unwrap();
+        let primary = crate::persistence::PendingUpload {
+            id: Uuid::parse_str(base["id"].as_str().unwrap()).unwrap(),
+            object_key: base["objectKey"].as_str().unwrap().to_owned(),
+            expected_sha256: base["expectedSha256"].as_str().unwrap().to_owned(),
+            content_type: base["contentType"].as_str().unwrap().to_owned(),
+            size_bytes: base["sizeBytes"].as_u64().unwrap(),
+            expires_at: base["expiresAt"].as_str().unwrap().parse().unwrap(),
+        };
         let mut mirror_value = base;
         mirror_value["expiresAt"] = serde_json::json!("2026-08-30T12:00:00.001Z");
-        let mirror: hhm_orm_core::PendingUpload = serde_json::from_value(mirror_value).unwrap();
+        let mirror = crate::persistence::PendingUpload {
+            id: Uuid::parse_str(mirror_value["id"].as_str().unwrap()).unwrap(),
+            object_key: mirror_value["objectKey"].as_str().unwrap().to_owned(),
+            expected_sha256: mirror_value["expectedSha256"].as_str().unwrap().to_owned(),
+            content_type: mirror_value["contentType"].as_str().unwrap().to_owned(),
+            size_bytes: mirror_value["sizeBytes"].as_u64().unwrap(),
+            expires_at: mirror_value["expiresAt"].as_str().unwrap().parse().unwrap(),
+        };
 
         assert_ne!(primary, mirror);
         assert!(same_upload_identity(&primary, &mirror));

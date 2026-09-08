@@ -5,16 +5,18 @@ on:
     paths:
       - Cargo.lock
       - Cargo.toml
+      - .cli-flags.toml
       - Dockerfile
       - env/enc/**
       - scripts/sops-entrypoint.sh
       - src/**
       - .github/workflows/container.yml
   push:
-    branches: [main]
+    branches: [dev, main]
     paths:
       - Cargo.lock
       - Cargo.toml
+      - .cli-flags.toml
       - Dockerfile
       - env/enc/**
       - scripts/sops-entrypoint.sh
@@ -41,10 +43,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Require private dependency credential
-        env:
-          FLEET_GITHUB_TOKEN: ${{ secrets.FLEET_GITHUB_READ_TOKEN }}
-        run: test -n "$FLEET_GITHUB_TOKEN"
       - name: Set up Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.0.0
       - name: Log in to GHCR
@@ -64,10 +62,8 @@ jobs:
           provenance: mode=max
           sbom: true
           build-args: SOURCE_REVISION=${{ github.sha }}
-          secrets: github_token=${{ secrets.FLEET_GITHUB_READ_TOKEN }}
           tags: |
             ghcr.io/hacker-house-medellin/hhm-api:${{ github.sha }}
-            ghcr.io/hacker-house-medellin/hhm-api:main
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Record immutable digest

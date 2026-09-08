@@ -2,17 +2,17 @@ use std::time::Duration;
 
 use axum::http::{HeaderMap, header::AUTHORIZATION};
 use futures_util::StreamExt;
-use hhm_orm_core::VerifiedSubject;
 use reqwest::{StatusCode, header::ACCEPT, redirect::Policy};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::config::Config;
+use crate::{config::Config, persistence::VerifiedSubject};
 
 const MAX_CREDENTIAL_BYTES: usize = 16 * 1024;
 const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 const MAX_AUDIENCE_BYTES: usize = 128;
+const REQUIRED_SCOPES: &[&str] = &["hhm:intake:write"];
 
 #[derive(Clone)]
 pub struct Authenticator {
@@ -40,6 +40,8 @@ pub enum AuthError {
     Missing,
     #[error("authentication is invalid")]
     Invalid,
+    #[error("authenticated subject is not authorized")]
+    Forbidden,
     #[error("authentication authority is unavailable")]
     Unavailable,
 }
@@ -164,7 +166,7 @@ impl Authenticator {
                 payload: IntrospectionRequest {
                     token,
                     audience: &self.audience,
-                    required_scopes: &[],
+                    required_scopes: REQUIRED_SCOPES,
                 },
             })
             .send()
@@ -188,7 +190,8 @@ impl Authenticator {
         let bytes = bounded_response(response).await?;
         let introspection: Introspection =
             serde_json::from_slice(&bytes).map_err(|_| AuthError::Invalid)?;
-        if !eligible_for_intake(&introspection, &self.audience) {
+        authorize_introspection(&introspection, &self.audience)?;
+        if introspection.sub.as_deref().is_none_or(str::is_empty) {
             return Err(AuthError::Invalid);
         }
         VerifiedSubject::from_verified_claim(introspection.sub.ok_or(AuthError::Invalid)?)
@@ -231,10 +234,14 @@ fn introspection_endpoint(raw: &str) -> Result<Url, AuthBuildError> {
     Ok(url)
 }
 
-fn eligible_for_intake(introspection: &Introspection, audience: &str) -> bool {
-    introspection.active
-        && introspection.aud.as_deref() == Some(audience)
-        && introspection.has_scope("hhm:intake:write")
+fn authorize_introspection(introspection: &Introspection, audience: &str) -> Result<(), AuthError> {
+    if !introspection.active || !(introspection.aud.as_deref() == Some(audience)) {
+        return Err(AuthError::Invalid);
+    }
+    if !introspection.has_scope("hhm:intake:write") {
+        return Err(AuthError::Forbidden);
+    }
+    Ok(())
 }
 
 fn bearer_token(headers: &HeaderMap) -> Result<Option<&str>, AuthError> {
@@ -274,15 +281,21 @@ mod tests {
             aud: Some("hhm-api".into()),
             scope: Some("hhm:intake:write".into()),
         };
-        assert!(eligible_for_intake(&valid, "hhm-api"));
+        assert_eq!(authorize_introspection(&valid, "hhm-api"), Ok(()));
 
         let mut wrong_audience = valid.clone();
         wrong_audience.aud = Some("admin-api".into());
-        assert!(!eligible_for_intake(&wrong_audience, "hhm-api"));
+        assert_eq!(
+            authorize_introspection(&wrong_audience, "hhm-api"),
+            Err(AuthError::Invalid)
+        );
 
         let mut missing_scope = valid;
         missing_scope.scope = Some("hhm:intake:read".into());
-        assert!(!eligible_for_intake(&missing_scope, "hhm-api"));
+        assert_eq!(
+            authorize_introspection(&missing_scope, "hhm-api"),
+            Err(AuthError::Forbidden)
+        );
     }
 
     #[test]

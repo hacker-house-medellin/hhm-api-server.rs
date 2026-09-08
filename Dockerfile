@@ -5,23 +5,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /work
 COPY Cargo.toml Cargo.lock ./
-RUN --mount=type=secret,id=hhm_github_token,required=true \
-    set -eu; \
-    hhm_token="$(cat /run/secrets/hhm_github_token)"; \
-    test -n "$hhm_token"; \
-    trap 'rm -f /root/.gitconfig' EXIT; \
-    git config --global url."https://x-access-token:${hhm_token}@github.com/hacker-house-medellin/".insteadOf \
-      "https://github.com/hacker-house-medellin/"; \
-    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo fetch --locked
+RUN cargo fetch --locked
 COPY . .
-RUN --mount=type=secret,id=hhm_github_token,required=true \
-    set -eu; \
-    hhm_token="$(cat /run/secrets/hhm_github_token)"; \
-    test -n "$hhm_token"; \
-    trap 'rm -f /root/.gitconfig' EXIT; \
-    git config --global url."https://x-access-token:${hhm_token}@github.com/hacker-house-medellin/".insteadOf \
-      "https://github.com/hacker-house-medellin/"; \
-    CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --locked --release
+RUN cargo build --locked --release
 
 FROM debian:bookworm-slim
 ARG SOURCE_REVISION=unknown

@@ -18,8 +18,9 @@ HHaus Supabase PostgreSQL project before returning success.
 | `POST` | `/v1/referrals` | required | Submit a referral for another person |
 
 Wire contracts and validation rules are owned by `hhm-interfaces`. Database
-capabilities are owned by `hhm-orm-core`; this runtime cannot execute arbitrary
-SQL and never runs migrations at startup.
+schema authority and generated projections are owned by `hhm-lib-core`. This
+runtime exposes only named, parameterized persistence commands and never runs
+migrations at startup. Its build graph contains no private source dependency.
 
 ## Security and persistence boundary
 
@@ -29,6 +30,14 @@ SQL and never runs migrations at startup.
 - A supplied bearer token is introspected with the official Shared Auth service
   client. An invalid token fails closed and is never downgraded to anonymous.
 - Browser CORS uses an exact allowlist; wildcard origins are rejected.
+- `ores-middleware` is pinned to immutable public commit
+  `6183cc877d6c058349adc733d325297c07d1c063`. It enforces request correlation,
+  a 256 KiB default body limit, deadlines, per-peer/route rate limits, strict
+  forwarded-header trust, security headers, and an `ores-otel`-compatible
+  telemetry sink at the actual Axum boundary.
+- The socket listener supplies the immediate peer address. Forwarded protocol
+  and client-IP headers are rejected unless that peer matches an explicitly
+  configured CIDR; no public header can nominate itself as trusted.
 - Uploaded identity documents remain in the private Supabase Storage bucket.
   The API issues a short-lived signed upload URL, then streams and verifies the
   resulting object without retaining its bytes in application memory.
@@ -53,6 +62,18 @@ SOPS/age runtime entrypoint; they are never embedded in the container image.
 `CORS_ORIGINS` is a comma-separated list of exact origins. Remote origins must
 use HTTPS and cannot include paths, queries, fragments, or wildcards.
 
+`flags-2-env` owns all runtime resolution and command-line precedence. The
+middleware reads only the resulting immutable configuration. Production must
+set `APP_ENV=production`, select `in-process` or `trusted-proxy` TLS, and supply
+the rate-limit HMAC key through the approved secret store. Trusted-proxy mode
+also requires explicit immediate-peer CIDRs.
+
+The public real-time route name is reserved as `/v1/realtime`, and the internal
+raw TCP service port is `8090`. This slice establishes the shared lifecycle and
+WebSocket message isolation primitive; it does not claim an application-level
+real-time protocol or expose the internal TCP listener before those protocols
+have contract and end-to-end coverage.
+
 ## Development
 
 The API requires Rust 1.94 or later.
@@ -67,6 +88,10 @@ cargo test --locked --all-targets --all-features
 
 The unit suite does not need live secrets. Production startup is intentionally
 fail-closed unless every required integration is configured.
+
+The request-lifecycle suite covers `413`, `401`, `403`, `429`, correlation,
+trusted/untrusted proxy behavior, redacted response surfaces, telemetry
+completion, and WebSocket message panic isolation.
 
 ## Schema and deployment
 

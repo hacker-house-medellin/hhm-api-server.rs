@@ -1,11 +1,10 @@
 use futures_util::StreamExt;
-use hhm_orm_core::PendingUpload;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::config::Config;
+use crate::{config::Config, persistence::PendingUpload};
 
 const INTAKE_BUCKET: &str = "hhm-intake-private";
 const MAX_UPLOAD_BYTES: u64 = 10 * 1024 * 1024;

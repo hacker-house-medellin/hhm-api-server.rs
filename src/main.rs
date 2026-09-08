@@ -5,8 +5,6 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenvy::dotenv().ok();
-
     if let Some(output) = flags::process_control().map_err(anyhow::Error::msg)? {
         print!("{output}");
         return Ok(());

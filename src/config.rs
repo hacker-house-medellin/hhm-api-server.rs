@@ -1,7 +1,9 @@
-use std::{env, net::SocketAddr};
+use std::net::SocketAddr;
 
 use secrecy::SecretString;
 use url::Url;
+
+use crate::middleware::{RequestPolicy, RequestPolicyError};
 
 #[derive(Clone)]
 pub struct Config {
@@ -16,6 +18,7 @@ pub struct Config {
     pub shared_auth_service_credential: SecretString,
     pub shared_auth_audience: String,
     pub cors_origins: String,
+    pub request_policy: RequestPolicy,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -24,18 +27,11 @@ pub enum ConfigError {
     Missing(&'static str),
     #[error("configuration is invalid: {0}")]
     Invalid(&'static str),
+    #[error("request policy is invalid")]
+    RequestPolicy(#[from] RequestPolicyError),
 }
 
 impl Config {
-    /// Loads fail-closed runtime configuration from the process environment.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ConfigError`] when a required setting is absent or unsafe.
-    pub fn from_env() -> Result<Self, ConfigError> {
-        Self::from_resolver(|name| env::var(name).ok())
-    }
-
     /// Loads fail-closed runtime configuration from an audited resolver.
     ///
     /// This is the command-line integration boundary: `flags-2-env` may supply
@@ -74,6 +70,7 @@ impl Config {
         {
             return Err(ConfigError::Invalid("TURNSTILE_ACTION"));
         }
+        let request_policy = RequestPolicy::from_lookup(&mut lookup)?;
 
         Ok(Self {
             bind_address,
@@ -99,6 +96,7 @@ impl Config {
             )?),
             shared_auth_audience: required(&mut lookup, "SHARED_AUTH_AUDIENCE")?,
             cors_origins: required(&mut lookup, "CORS_ORIGINS")?,
+            request_policy,
         })
     }
 }
@@ -193,6 +191,8 @@ mod tests {
             ),
             ("SHARED_AUTH_AUDIENCE".to_owned(), "hhm-api".to_owned()),
             ("CORS_ORIGINS".to_owned(), "https://hhaus.org".to_owned()),
+            ("APP_ENV".to_owned(), "test".to_owned()),
+            ("ORES_MIDDLEWARE_TLS_MODE".to_owned(), "disabled".to_owned()),
         ]);
         let config = Config::from_resolver(|name| values.get(name).cloned()).expect("config");
         assert_eq!(config.bind_address.to_string(), "127.0.0.1:31337");
