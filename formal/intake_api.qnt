@@ -240,7 +240,7 @@ module intake_api {
       s.upload_mirror_intent,
     },
     not(s.upload_object_verified) or and {
-      s.upload_status == UploadPending,
+      or { s.upload_status == UploadPending, s.upload_status == UploadVerified },
       s.upload_identity_matched,
     },
     not(s.upload_mirror_verified) or s.upload_object_verified,
