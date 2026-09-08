@@ -4,6 +4,8 @@
 //! `hhm-lib-core` schema. It deliberately does not depend on the private runtime
 //! crate: hosted builds must be reproducible with public source
 //! dependencies, while database access remains constrained to named commands.
+//! This temporary packaging boundary does not replace the canonical ORM
+//! architecture; it exposes no connection, generic SQL, DDL, or migration API.
 
 use chrono::{DateTime, Duration, Utc};
 use hhm_interfaces::intake::{

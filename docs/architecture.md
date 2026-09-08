@@ -8,7 +8,9 @@
   schema, and generated SeaORM entities.
 - `hhm-api-server.rs`: HTTP, anti-abuse, authentication, orchestration, private
   object verification, named dual-target persistence commands, and safe error
-  mapping. It depends only on distributable public source repositories.
+  mapping. It depends only on distributable public source repositories. Its
+  product-local command module is a temporary public-API packaging boundary,
+  not completion or replacement of the separate canonical ORM architecture.
 - `ores-middleware`: portable request lifecycle, trusted-peer/TLS policy,
   request context, limits, rate limiting, security headers, and the compatible
   `ores-otel` telemetry port.

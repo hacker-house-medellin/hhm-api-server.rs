@@ -21,6 +21,9 @@ Wire contracts and validation rules are owned by `hhm-interfaces`. Database
 schema authority and generated projections are owned by `hhm-lib-core`. This
 runtime exposes only named, parameterized persistence commands and never runs
 migrations at startup. Its build graph contains no private source dependency.
+The product-local command module is a temporary packaging boundary for this
+public API: removing the undistributable private runtime dependency does not
+complete or replace the separate canonical ORM/platform architecture.
 
 ## Security and persistence boundary
 
