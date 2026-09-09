@@ -1,0 +1,14 @@
+name: Resident operations Contract IR admission
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admission:
+    uses: hacker-house-medellin/hhm-interfaces/.github/workflows/reusable-resident-contract-admission.yml@7116e3a3cb239b5e07ba7501c4c7ef6736fdb57f
+    with:
+      consumer_repository: ${{ github.repository }}
+      consumer_role: hhm-public-write-api
