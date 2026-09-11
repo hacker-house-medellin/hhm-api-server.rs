@@ -1,0 +1,26 @@
+name: route-map-sync
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: hacker-house-medellin/hhm-lib-core
+          path: ../hhm-lib-core
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # No pip install: the checker and generator are standard library only, so
+      # CI and a developer laptop cannot reach different verdicts.
+      - name: Validate the route maps and the generated clients
+        run: python3 scripts/check-route-sync.py --root .

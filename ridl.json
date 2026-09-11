@@ -1,0 +1,11 @@
+{
+  "maps": [
+    "../hhm-lib-core/route-maps/api.route-map.json"
+  ],
+  "sources": [
+    "src"
+  ],
+  "out": "generated",
+  "skip_drift": true,
+  "allow_docs_merge": true
+}

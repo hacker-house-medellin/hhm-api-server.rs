@@ -99,6 +99,10 @@ pub fn router(state: AppState, cors_origins: &str) -> anyhow::Result<Router> {
     Ok(Router::new()
         .route("/healthz", get(health))
         .route("/readyz", get(readiness))
+        .route(
+            "/v1/data-plane/capabilities",
+            get(|| async { axum::Json(crate::web_api_plane::capabilities()) }),
+        )
         .route("/v1/pre-interests", post(create_pre_interest))
         .route("/v1/intake/uploads", post(create_upload_intent))
         .route(
