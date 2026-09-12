@@ -1,0 +1,21 @@
+# A self-testing demonstration of the vendoring pattern described in README.md.
+#
+# `opto_sync.rs` is meant to be copied into YOUR crate, next to the file
+# `ridl generate --lang rust` produces. This package proves the two compile
+# together by doing exactly that with the repository's example route map, so a
+# change to either side fails here before it fails in a consumer.
+[package]
+name = "ridl-runtime-rust"
+version = "0.1.0"
+edition = "2021"
+description = "Reference opto-sync transport for ridl-generated Rust clients."
+license = "MIT"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde"] }
+
+[lints.rust]
+unsafe_code = "deny"
