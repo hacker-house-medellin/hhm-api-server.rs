@@ -1,0 +1,7 @@
+# zed-lock diagnostics only; descriptor ownership is authoritative
+pid=54326
+hostname=
+executable=zed
+thread=main
+operation=install recursive Zed dependency graph
+acquired_unix_ms=1787689442373
