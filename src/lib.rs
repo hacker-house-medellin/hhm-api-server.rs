@@ -2,8 +2,10 @@ mod api;
 mod auth;
 pub mod config;
 mod external;
+pub mod four_transports;
 pub mod middleware;
 mod persistence;
+pub mod web_api_plane;
 
 use std::net::SocketAddr;
 
