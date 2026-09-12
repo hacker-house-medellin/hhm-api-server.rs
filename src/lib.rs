@@ -2,6 +2,7 @@ mod api;
 mod auth;
 pub mod config;
 mod external;
+mod hex;
 pub mod middleware;
 mod persistence;
 

@@ -221,7 +221,7 @@ impl SupabaseStorage {
             }
             digest.update(&chunk);
         }
-        let observed_digest = format!("{:x}", digest.finalize());
+        let observed_digest = crate::hex::lower_hex(&digest.finalize());
         if observed_size != expected.size_bytes || observed_digest != expected.expected_sha256 {
             return Err(ExternalError::ObjectMismatch);
         }
