@@ -173,8 +173,10 @@ fn option_name(option: &str) -> String {
 }
 
 fn help_table() -> Result<String, String> {
+    // toml 1.x parses `toml::Value` as a single value, not a document; the
+    // contract is a whole document, so read it as a table.
     let contract = CONTRACT
-        .parse::<toml::Value>()
+        .parse::<toml::Table>()
         .map_err(|error| format!("cannot read flags-2-env help metadata: {error}"))?;
     let flags = contract
         .get("flags")
@@ -240,7 +242,7 @@ mod tests {
 
     #[test]
     fn command_line_overrides_environment_with_a_typed_value() {
-        let contract = CONTRACT.parse::<toml::Value>().expect("contract");
+        let contract = CONTRACT.parse::<toml::Table>().expect("contract");
         let flag = contract["flags"]
             .as_table()
             .and_then(|flags| {

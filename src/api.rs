@@ -440,7 +440,7 @@ where
 
 fn canonical_digest<T: Serialize>(input: &T) -> Result<String, ApiFailure> {
     let bytes = serde_json::to_vec(input).map_err(|_| ApiFailure::invalid())?;
-    Ok(format!("{:x}", Sha256::digest(bytes)))
+    Ok(crate::hex::lower_hex(&Sha256::digest(bytes)))
 }
 
 fn context_payload(context: &SubmissionContext) -> &str {
