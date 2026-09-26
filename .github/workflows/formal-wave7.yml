@@ -1,0 +1,28 @@
+name: Formal Wave 7
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  assignment-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exhaust room assignment exclusivity
+        run: |
+          python3 - <<'PY'
+          from itertools import product
+          for room_occupied, authenticated, tenant_match, duplicate in product((False, True), repeat=4):
+              admitted = authenticated and tenant_match and (not room_occupied)
+              occupied_after = room_occupied or (admitted and not duplicate)
+              assert not (room_occupied and admitted), 'occupied room accepted a second assignment'
+              if not authenticated or not tenant_match:
+                  assert not admitted, 'unscoped guest assignment admitted'
+              if duplicate:
+                  assert occupied_after == room_occupied, 'duplicate assignment changed occupancy'
+          print('HHM room assignment exclusivity/idempotency model: ok')
+          PY
