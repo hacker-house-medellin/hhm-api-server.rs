@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 type Interval = (i32, i32);
 
 fn overlaps(a: Interval, b: Interval) -> bool {
