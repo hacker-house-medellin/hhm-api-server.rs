@@ -24,7 +24,7 @@ fn occupancy_oracle(existing: &[Interval], proposed: Interval) -> bool {
         let occupied = existing
             .iter()
             .copied()
-            .any(|(start, end)| start <= slot && slot < end);
+            .any(|(start, end)| (start..end).contains(&slot));
 
         if occupied {
             return false;
