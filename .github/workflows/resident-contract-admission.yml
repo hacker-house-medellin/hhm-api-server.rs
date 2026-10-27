@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   admission:
-    uses: hacker-house-medellin/hhm-interfaces/.github/workflows/reusable-resident-contract-admission.yml@c415e8eda00b85a6d7f0c434c00e1845518ad6e5
+    uses: hacker-house-medellin/hhm-interfaces/.github/workflows/reusable-resident-contract-admission.yml@f91355d8ea78e7baa2cdb4cd70f3492728ff24fe
     with:
       consumer_repository: ${{ github.repository }}
       consumer_role: hhm-public-write-api
