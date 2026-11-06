@@ -99,6 +99,20 @@ module intake_api {
     s' = { ...s, mirror_failure_recorded: true },
   }
 
+  // A retry is admitted only for a previously committed primary record
+  // whose mirror attempt failed. The retry reuses the bound idempotency key,
+  // digest and canonical identity; it does not issue a receipt.
+  action retry_failed_mirror = all {
+    s.primary_stored,
+    s.request_validated,
+    s.idempotency_bound,
+    s.digest_bound,
+    s.mirror_failure_recorded,
+    not(s.mirror_stored),
+    not(s.receipt_issued),
+    s' = { ...s, mirror_failure_recorded: false },
+  }
+
   action mark_primary_mirrored = all {
     s.primary_stored,
     s.mirror_stored,
@@ -196,6 +210,7 @@ module intake_api {
     store_primary,
     store_mirror,
     record_mirror_failure,
+    retry_failed_mirror,
     mark_primary_mirrored,
     issue_submission_receipt,
     exact_submission_replay,
@@ -220,6 +235,14 @@ module intake_api {
 
   val request_identity_is_atomic =
     s.request_validated == and { s.idempotency_bound, s.digest_bound }
+
+  // A recorded mirror failure is a retryable non-receipt state. In particular
+  // a retry cannot turn a persisted primary-only submission into success.
+  val retry_never_issues_receipt = not(s.mirror_failure_recorded) or and {
+    s.primary_stored,
+    not(s.mirror_stored),
+    not(s.receipt_issued),
+  }
 
   val dual_persistence_order = and {
     not(s.primary_stored) or s.request_validated,
@@ -260,6 +283,7 @@ module intake_api {
   val api_safety = and {
     accepted_auth_precedes_validation,
     request_identity_is_atomic,
+    retry_never_issues_receipt,
     dual_persistence_order,
     upload_completion_order,
   }
