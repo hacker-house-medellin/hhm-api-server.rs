@@ -8,8 +8,8 @@ dist/
 coverage/
 .zed/
 .vendor/.zed/
-tmp
-temp
+tmp/
+temp/
 tmp/worktrees
 temp/worktrees
 
@@ -46,3 +46,6 @@ sops-private*.txt
 
 # typespec-json-schema-validator comparison evidence (generated; never an authority)
 .typespec-json-schema-validator/
+
+# machine-local symlink to ORESoftware/my-ai AGENTS.md; never committed
+.ores/
