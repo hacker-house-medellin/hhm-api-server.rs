@@ -103,6 +103,8 @@ def main() -> None:
         "auth order": "accepted_auth_precedes_validation",
         "request binding": "request_identity_is_atomic",
         "dual persistence": "dual_persistence_order",
+        "retryable mirror failure": "retry_failed_mirror",
+        "retry safety invariant": "retry_never_issues_receipt",
         "upload completion": "upload_completion_order",
         "aggregate invariant": "api_safety",
     }

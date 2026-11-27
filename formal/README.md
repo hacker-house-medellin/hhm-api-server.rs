@@ -10,7 +10,9 @@ PostgreSQL capability layer:
 - Supabase mirror persistence follows the primary write;
 - the primary outbox is marked mirrored before an accepted submission receipt;
 - a failed mirror write records a retryable failure and does not issue a false
-  acceptance receipt; and
+  acceptance receipt;
+- a retry of that failed mirror reuses the already bound primary identity and
+  digest, returning to the mirror-pending state without fabricating success; and
 - upload completion follows primary metadata lookup, digest comparison,
   cross-database identity equality, object-store verification, mirror
   verification, and finally primary verification.
